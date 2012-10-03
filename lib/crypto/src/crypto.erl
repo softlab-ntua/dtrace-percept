@@ -35,7 +35,7 @@
 -export([sha256_mac/2, sha256_mac/3]).
 -export([sha384_mac/2, sha384_mac/3]).
 -export([sha512_mac/2, sha512_mac/3]).
--export([hmac_init/2, hmac_update/2, hmac_final/1, hmac_final_n/2]).
+-export([hmac/3, hmac/4, hmac_init/2, hmac_update/2, hmac_final/1, hmac_final_n/2]).
 -export([des_cbc_encrypt/3, des_cbc_decrypt/3, des_cbc_ivec/1]).
 -export([des_ecb_encrypt/2, des_ecb_decrypt/2]).
 -export([des_cfb_encrypt/3, des_cfb_decrypt/3, des_cfb_ivec/2]).
@@ -75,6 +75,7 @@
 		    sha256, sha256_init, sha256_update, sha256_final,
 		    sha384, sha384_init, sha384_update, sha384_final,
 		    sha512, sha512_init, sha512_update, sha512_final,
+		    hmac, hmac_init, hmac_update, hmac_final,
 		    md5_mac,  md5_mac_96,
 		    sha_mac,  sha_mac_96,
 		    sha224_mac, sha256_mac, sha384_mac, sha512_mac,
@@ -412,10 +413,27 @@ sha512_final_nif(_Context) -> ?nif_stub.
 %%
 %%  HMAC (multiple hash options)
 %%
+
+-spec hmac(_, iodata(), iodata()) -> binary().
+-spec hmac(_, iodata(), iodata(), integer()) -> binary().
 -spec hmac_init(atom(), iodata()) -> binary().                             
 -spec hmac_update(binary(), iodata()) -> binary().
 -spec hmac_final(binary()) -> binary().                             
 -spec hmac_final_n(binary(), integer()) -> binary().                             
+
+hmac(md5, Key, Data)    -> md5_mac(Key, Data);
+hmac(sha, Key, Data)    -> sha_mac(Key, Data);
+hmac(sha224, Key, Data) -> sha224_mac(Key, Data);
+hmac(sha256, Key, Data) -> sha256_mac(Key, Data);
+hmac(sha384, Key, Data) -> sha384_mac(Key, Data);
+hmac(sha512, Key, Data) -> sha512_mac(Key, Data).
+
+hmac(md5, Key, Data, Size)    -> md5_mac_n(Key, Data, Size);
+hmac(sha, Key, Data, Size)    -> sha_mac(Key, Data, Size);
+hmac(sha224, Key, Data, Size) -> sha224_mac(Key, Data, Size);
+hmac(sha256, Key, Data, Size) -> sha256_mac(Key, Data, Size);
+hmac(sha384, Key, Data, Size) -> sha384_mac(Key, Data, Size);
+hmac(sha512, Key, Data, Size) -> sha512_mac(Key, Data, Size).
 
 hmac_init(_Type, _Key) -> ?nif_stub.
 hmac_update(_Context, _Data) -> ? nif_stub.
