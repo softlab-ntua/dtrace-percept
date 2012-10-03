@@ -9,23 +9,19 @@ tracing machanisms of Erlang for the collection of trace information.
 
     stap path/to/percept/lib/priv/dtrace/dtrace-percept.stap > trace.dat
 
-or
-
     dtrace path/to/percept/lib/priv/dtrace/dtrace-percept.d > trace.dat
 
 2. Perform the action you want to trace.
 
-E.g.
-    
     erl -noshell - eval "bang:bang(2,30)." -s init stop
 
 3. Stop the execution of the DTrace/SystemTap script (by pressing Ctrl+C).
 
-3. Analyze the produced trace file.
+4. Analyze the produced trace file.
 
     1> percept:d_analyze("trace.dat").
 
-4. Start the web server (as usual) and inspect the collected information using 
+5. Start the web server (as usual) and inspect the collected information using 
 your favorite browser (as usual).
 
     1> percept:start_webserver().
