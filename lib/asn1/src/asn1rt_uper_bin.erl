@@ -28,13 +28,13 @@
  -export([cindex/3, list_to_record/2]).
  -export([setext/1, fixoptionals/3, 
  	 fixextensions/2, 
- 	 getext/1, getextension/2, skipextensions/3, getbit/1, getchoice/3 ]).
- -export([getoptionals2/2, set_choice/3, encode_integer/2, encode_integer/3  ]).
- -export([decode_integer/2, decode_integer/3, encode_small_number/1, encode_boolean/1, 
- 	 decode_boolean/1, encode_length/2, decode_length/1, decode_length/2,
- 	 encode_small_length/1, decode_small_length/1,
- 	 decode_compact_bit_string/3]).
- -export([decode_enumerated/3, 
+	 getext/1, getextension/2, skipextensions/3, getbit/1, getchoice/4 ]).
+ -export([getoptionals2/2, set_choice/4, encode_integer/2, encode_integer/3  ]).
+ -export([decode_integer/2, decode_integer/3, encode_small_number/1, encode_boolean/1,
+	 decode_boolean/1, encode_length/2, decode_length/1, decode_length/2,
+	 encode_small_length/1, decode_small_length/1,
+	 decode_compact_bit_string/3]).
+ -export([decode_enumerated/3,
  	 encode_bit_string/3, decode_bit_string/3  ]).
  -export([encode_octet_string/2, decode_octet_string/2,
 	  encode_null/1, decode_null/1,
@@ -157,12 +157,12 @@ skipextensions(Bytes,Nr,ExtensionBitPattern) ->
     end.
 
 
-getchoice(Bytes,1,0) -> % only 1 alternative is not encoded
+getchoice(Bytes,1,0,_NumBits) -> % only 1 alternative is not encoded
     {0,Bytes};
-getchoice(Bytes,_,1) ->
+getchoice(Bytes,_,1,_NumBits) ->
     decode_small_number(Bytes);
-getchoice(Bytes,NumChoices,0) ->
-    decode_constrained_number(Bytes,{0,NumChoices-1}).
+getchoice(Bytes,NumChoices,0,NumBits) ->
+    decode_constrained_number(Bytes,{0,NumChoices-1,NumBits}).
 
 
 %%%%%%%%%%%%%%%
@@ -220,11 +220,11 @@ getoctets_as_list(Buffer,Num) ->
 %% second is the Extensions and then Altnum must also be a tuple with the
 %% lengths of the 2 lists 
 %%
-set_choice(Alt,{L1,L2},{Len1,_Len2}) ->
+set_choice(Alt,{L1,L2},{Len1,_Len2},NumBits) ->
     case set_choice_tag(Alt,L1) of
 	N when is_integer(N), Len1 > 1 ->
 	    [<<0:1>>, % the value is in the root set
-	     encode_integer([{'ValueRange',{0,Len1-1}}],N)];
+	     encode_integer([{'ValueRange',{0,Len1-1,NumBits}}],N)];
 	N when is_integer(N) ->
 	    <<0:1>>; % no encoding if only 0 or 1 alternative
 	false ->
@@ -236,10 +236,10 @@ set_choice(Alt,{L1,L2},{Len1,_Len2}) ->
 		     unknown_choice_alt
 	     end]
     end;
-set_choice(Alt,L,Len) ->
+set_choice(Alt,L,Len,NumBits) ->
     case set_choice_tag(Alt,L) of
 	N when is_integer(N), Len > 1 ->
-	    encode_integer([{'ValueRange',{0,Len-1}}],N);
+	    encode_integer([{'ValueRange',{0,Len-1,NumBits}}],N);
 	N when is_integer(N) ->
 	    []; % no encoding if only 0 or 1 alternative
 	false ->
@@ -391,7 +391,7 @@ encode_integer1(C, Val) ->
 	{Lb,'MAX'} ->
 	    encode_semi_constrained_number(Lb,Val);
 	%% positive with range
-	{Lb,Ub} when Val >= Lb,
+	{Lb,Ub,_NumBits} when Val >= Lb,
 		     Ub >= Val ->
 	    encode_constrained_number(VR,Val);
 	_ ->
@@ -435,7 +435,7 @@ decode_integer1(Buffer,C) ->
 	    decode_unconstrained_number(Buffer);
 	{Lb, 'MAX'} ->
 	    decode_semi_constrained_number(Buffer,Lb);
-	{_,_} ->
+	{_,_,_} ->
 	    decode_constrained_number(Buffer,VR)
     end.
 
@@ -488,18 +488,14 @@ decode_semi_constrained_number(Bytes,Lb) ->
 
 encode_constrained_number(Range,{Name,Val}) when is_atom(Name) ->
     encode_constrained_number(Range,Val);
-encode_constrained_number({Lb,Ub},Val) when Val >= Lb, Ub >= Val -> 
-    Range = Ub - Lb + 1,
+encode_constrained_number({Lb,Ub,NumBits},Val) when Val >= Lb, Ub >= Val ->
     Val2 = Val - Lb,
-    NumBits = num_bits(Range),
     <<Val2:NumBits>>;
-encode_constrained_number(Range,Val) -> 
+encode_constrained_number(Range,Val) ->
     exit({error,{asn1,{integer_range,Range,value,Val}}}).
 
 
-decode_constrained_number(Buffer,{Lb,Ub}) ->
-    Range = Ub - Lb + 1,
-    NumBits = num_bits(Range),
+decode_constrained_number(Buffer,{Lb,_Ub,NumBits}) ->
     {Val,Remain} = getbits(Buffer,NumBits),
     {Val+Lb,Remain}.
 
@@ -600,17 +596,17 @@ encode_length(undefined,Len) -> % un-constrained
 	    exit({error,{asn1,{encode_length,{nyi,above_16k}}}})
     end;
 
-encode_length({0,'MAX'},Len) ->
+encode_length({0,'MAX',_},Len) ->
     encode_length(undefined,Len);
-encode_length(Vr={Lb,Ub},Len) when Ub =< 65535 ,Lb >= 0 -> % constrained
+encode_length(Vr={Lb,Ub,_NumBits},Len) when Ub =< 65535 ,Lb >= 0 -> % constrained
     encode_constrained_number(Vr,Len);
-encode_length({Lb,_Ub},Len) when is_integer(Lb), Lb >= 0 -> % Ub > 65535
+encode_length({Lb,_Ub,_},Len) when is_integer(Lb), Lb >= 0 -> % Ub > 65535
     encode_length(undefined,Len);
-encode_length({Vr={Lb,Ub},Ext},Len) 
-  when Ub =< 65535 ,Lb >= 0, Len=<Ub, is_list(Ext) -> 
+encode_length({Vr={Lb,Ub,_NumBits},Ext},Len)
+  when Ub =< 65535 ,Lb >= 0, Len=<Ub, is_list(Ext) ->
     %% constrained extensible
     [<<0:1>>,encode_constrained_number(Vr,Len)];
-encode_length({{Lb,_Ub},Ext},Len) when is_list(Ext) ->
+encode_length({{Lb,_Ub,_},Ext},Len) when is_list(Ext) ->
     [<<1:1>>,encode_semi_constrained_number(Lb,Len)];
 encode_length(SingleValue,_Len) when is_integer(SingleValue) ->
     [].
@@ -643,11 +639,11 @@ decode_length(<<2:2,Val:14,Rest/bitstring>>,undefined)  ->
 decode_length(<<3:2,_:14,_Rest/bitstring>>,undefined)  ->
     exit({error,{asn1,{decode_length,{nyi,above_16k}}}});
 
-decode_length(Buffer,{Lb,Ub}) when Ub =< 65535 ,Lb >= 0 -> % constrained
-    decode_constrained_number(Buffer,{Lb,Ub});
-decode_length(Buffer,{Lb,_}) when is_integer(Lb), Lb >= 0 -> % Ub > 65535
+decode_length(Buffer,{Lb,Ub,NumBits}) when Ub =< 65535 ,Lb >= 0 -> % constrained
+    decode_constrained_number(Buffer,{Lb,Ub,NumBits});
+decode_length(Buffer,{Lb,_,_}) when is_integer(Lb), Lb >= 0 -> % Ub > 65535
     decode_length(Buffer,undefined);
-decode_length(Buffer,{VR={_Lb,_Ub},Ext}) when is_list(Ext) ->
+decode_length(Buffer,{VR={_Lb,_Ub,_NumBits},Ext}) when is_list(Ext) ->
     {0,Buffer2} = getbit(Buffer),
     decode_length(Buffer2, VR);
 	
@@ -754,19 +750,19 @@ encode_bit_string1(C, BL=[{bit,_No} | _RestVal], NamedBitList) ->
     BitList = make_and_set_list(ToSetPos,0),
     encode_bit_string1(C,BitList,NamedBitList);
 %% when the value is a list of ones and zeroes
-encode_bit_string1(Int, BitListValue, _) 
+encode_bit_string1(Int, BitListValue, _)
   when is_list(BitListValue),is_integer(Int) ->
     %% The type is constrained by a single value size constraint
     bit_list2bitstr(Int,BitListValue);
-encode_bit_string1(no, BitListValue,[]) 
+encode_bit_string1(no, BitListValue,[])
   when is_list(BitListValue) ->
     Len = length(BitListValue),
     [encode_length(undefined,Len),bit_list2bitstr(Len,BitListValue)];
-encode_bit_string1(C, BitListValue,[]) 
+encode_bit_string1(C, BitListValue,[])
   when is_list(BitListValue) ->
     Len = length(BitListValue),
     [encode_length(C,Len),bit_list2bitstr(Len,BitListValue)];
-encode_bit_string1(no, BitListValue,_NamedBitList) 
+encode_bit_string1(no, BitListValue,_NamedBitList)
   when is_list(BitListValue) ->
     %% this case with an unconstrained BIT STRING can be made more efficient
     %% if the complete driver can take a special code so the length field
@@ -775,7 +771,7 @@ encode_bit_string1(no, BitListValue,_NamedBitList)
 					    lists:reverse(BitListValue))),
     Len = length(NewBitLVal),
     [encode_length(undefined,Len),bit_list2bitstr(Len,NewBitLVal)];
-encode_bit_string1(C,BitListValue,_NamedBitList) 
+encode_bit_string1(C,BitListValue,_NamedBitList)
   when is_list(BitListValue) ->% C = {_,'MAX'}
     NewBitStr = bitstr_trailing_zeros(BitListValue,C),
     [encode_length(C,bit_size(NewBitStr)),NewBitStr];
@@ -809,9 +805,9 @@ adjust_trailing_zeros(Len,Bin) ->
 
 bitstr_trailing_zeros(BitList,C) when is_integer(C) ->
     bitstr_trailing_zeros1(BitList,C,C);
-bitstr_trailing_zeros(BitList,{Lb,Ub}) when is_integer(Lb) ->
+bitstr_trailing_zeros(BitList,{Lb,Ub,_}) when is_integer(Lb) ->
     bitstr_trailing_zeros1(BitList,Lb,Ub);
-bitstr_trailing_zeros(BitList,{{Lb,Ub},_}) when is_integer(Lb) ->
+bitstr_trailing_zeros(BitList,{{Lb,Ub,_},_}) when is_integer(Lb) ->
     bitstr_trailing_zeros1(BitList,Lb,Ub);
 bitstr_trailing_zeros(BitList,_) ->
     bit_list2bitstr(length(BitList),BitList).
@@ -832,18 +828,18 @@ bitstr_trailing_zeros1(BitList,Lb,Ub) ->
 %% encode_bin_bit_string/3, when value is a tuple of Unused and BinBits.
 %% Unused = integer(),i.e. number unused bits in least sign. byte of
 %% BinBits = binary().
-encode_bin_bit_string(C,{_,BinBits},_NamedBitList)
-  when is_integer(C),C=<16 ->
-    adjust_trailing_zeros(C,BinBits);
-encode_bin_bit_string(C,{_Unused,BinBits},_NamedBitList)
-  when is_integer(C) ->
-    adjust_trailing_zeros(C,BinBits);
-encode_bin_bit_string(C,UnusedAndBin={_,_},NamedBitList) ->
+encode_bin_bit_string(Int,{_,BinBits},_NamedBitList)
+  when is_integer(Int),Int=<16 ->
+    adjust_trailing_zeros(Int,BinBits);
+encode_bin_bit_string(Int,{_Unused,BinBits},_NamedBitList)
+  when is_integer(Int) ->
+    adjust_trailing_zeros(Int,BinBits);
+encode_bin_bit_string(Size,UnusedAndBin={_,_},NamedBitList) ->
     %% removes all trailing bits if NamedBitList is not empty
     BitStr = remove_trailing_bin(NamedBitList,UnusedAndBin),
-    case C of
-	{Lb,Ub} when is_integer(Lb),is_integer(Ub) ->
-	    [encode_length({Lb,Ub},bit_size(BitStr)),BitStr];
+    case Size of
+	{Lb,Ub,NumBits} when is_integer(Lb),is_integer(Ub) ->
+	    [encode_length({Lb,Ub,NumBits},bit_size(BitStr)),BitStr];
 	no ->
 	    [encode_length(undefined,bit_size(BitStr)),BitStr];
 	Sc -> 
@@ -931,9 +927,9 @@ decode_compact_bit_string(Buffer, C, NamedNumberList) ->
 	    {{PadLen,<<Bin/bitstring,0:PadLen>>},Buffer2};
 %% 		{0,_} -> {{0,Bin},Buffer2};
 %% 		{U,_} -> {{8-U,Bin},Buffer2}
-	{Lb,Ub} when is_integer(Lb),is_integer(Ub) ->
+	{Lb,Ub,NumBits} when is_integer(Lb),is_integer(Ub) ->
 	    %% This case may demand decoding of fragmented length/value
-	    {Len,Bytes2} = decode_length(Buffer,{Lb,Ub}),
+	    {Len,Bytes2} = decode_length(Buffer,{Lb,Ub,NumBits}),
 	    compact_bit_string(Bytes2,Len,NamedNumberList);
 	no ->
 	    %% This case may demand decoding of fragmented length/value
@@ -951,8 +947,8 @@ decode_compact_bit_string(Buffer, C, NamedNumberList) ->
 %% 
 decode_bit_string(Buffer, C, NamedNumberList) ->
     case get_constraint(C,'SizeConstraint') of
-	{Lb,Ub} when is_integer(Lb),is_integer(Ub) ->
-	    {Len,Bytes2} = decode_length(Buffer,{Lb,Ub}),
+	{Lb,Ub,NumBits} when is_integer(Lb),is_integer(Ub) ->
+	    {Len,Bytes2} = decode_length(Buffer,{Lb,Ub,NumBits}),
 	    bit_list_or_named(Bytes2,Len,NamedNumberList);
 	no ->
 	    {Len,Bytes2} = decode_length(Buffer,undefined),
@@ -1069,10 +1065,10 @@ encode_octet_string(C,Val) ->
 	    list_to_binary(Val);
 	Sv when Sv =<65535, Sv == length(Val) -> % fixed length
 	    list_to_binary(Val);
-	VR = {_,_}  ->
+	VR = {_,_,_}  ->
 	    [encode_length(VR,length(Val)),list_to_binary(Val)];
-	Sv when is_list(Sv) ->
-	    [encode_length({hd(Sv),lists:max(Sv)},length(Val)),list_to_binary(Val)];
+	{Sv,NumBits} when is_list(Sv) ->
+	    [encode_length({hd(Sv),lists:max(Sv),NumBits},length(Val)),list_to_binary(Val)];
 	no  ->
 	    [encode_length(undefined,length(Val)),list_to_binary(Val)]
     end.
@@ -1087,11 +1083,11 @@ decode_octet_string1(Bytes,Sv) when is_integer(Sv),Sv=<65535 ->
     getoctets_as_list(Bytes,Sv);
 decode_octet_string1(Bytes,Sv) when is_integer(Sv) ->
     decode_fragmented_octets(Bytes,Sv);
-decode_octet_string1(Bytes,{Lb,Ub}) ->
-    {Len,Bytes2} = decode_length(Bytes,{Lb,Ub}),
+decode_octet_string1(Bytes,{Lb,Ub,NumBits}) ->
+    {Len,Bytes2} = decode_length(Bytes,{Lb,Ub,NumBits}),
     getoctets_as_list(Bytes2,Len);
-decode_octet_string1(Bytes,Sv) when is_list(Sv) ->
-    {Len,Bytes2} = decode_length(Bytes,{hd(Sv),lists:max(Sv)}),
+decode_octet_string1(Bytes,{Sv,NumBits}) when is_list(Sv) ->
+    {Len,Bytes2} = decode_length(Bytes,{hd(Sv),lists:max(Sv),NumBits}),
     getoctets_as_list(Bytes2,Len);
 decode_octet_string1(Bytes,no) ->
     {Len,Bytes2} = decode_length(Bytes,undefined),
@@ -1125,10 +1121,12 @@ encode_known_multiplier_string(StringType,C,Val) ->
 	    [];
 	Ub when is_integer(Ub),Ub =<65535 -> % fixed length
 	    Result;
-	{Ub,Lb} ->
-	    [encode_length({Ub,Lb},length(Val)),Result];
-	Vl when is_list(Vl) ->
-	    [encode_length({lists:min(Vl),lists:max(Vl)},length(Val)),Result];
+	{Lb,Ub,Num_Bits} ->
+	    [encode_length({Lb,Ub,Num_Bits},length(Val)),Result];
+	{{Lb,Ub,Num_Bits},Ext} ->
+	    [encode_length({{Lb,Ub,Num_Bits},Ext},length(Val)),Result];
+	{Vl,Num_Bits} when is_list(Vl) ->
+	    [encode_length({lists:min(Vl),lists:max(Vl),Num_Bits},length(Val)),Result];
 	no  ->
 	    [encode_length(undefined,length(Val)),Result]
     end.
@@ -1146,16 +1144,19 @@ decode_known_multiplier_string(Bytes,StringType,C,_Ext) ->
 	    chars_decode(Bytes,NumBits,StringType,C,Ub);
 	0 ->
 	    {[],Bytes};
-	Vl when is_list(Vl) ->
-	    {Len,Bytes1} = decode_length(Bytes,{hd(Vl),lists:max(Vl)}),
+	{Vl,Num_Bits} when is_list(Vl) ->
+	    {Len,Bytes1} = decode_length(Bytes,{hd(Vl),lists:max(Vl),Num_Bits}),
 	    chars_decode(Bytes1,NumBits,StringType,C,Len);
 	no  ->
 	    {Len,Bytes1} = decode_length(Bytes,undefined),
 	    chars_decode(Bytes1,NumBits,StringType,C,Len);
-	{Lb,Ub}->
-	    {Len,Bytes1} = decode_length(Bytes,{Lb,Ub}),
+	{Lb,Ub,Num_Bits}->
+	    {Len,Bytes1} = decode_length(Bytes,{Lb,Ub,Num_Bits}),
+	    chars_decode(Bytes1,NumBits,StringType,C,Len);
+	{{Lb,Ub,Num_Bits},Ext}->
+	    {Len,Bytes1} = decode_length(Bytes,{{Lb,Ub,Num_Bits},Ext}),
 	    chars_decode(Bytes1,NumBits,StringType,C,Len)
-    end.
+	end.
 
 
 encode_NumericString(C,Val) ->
@@ -1606,13 +1607,3 @@ complete_NFP(InList) when is_list(InList) ->
     list_to_bitstring(InList);
 complete_NFP(InList) when is_bitstring(InList) ->
     InList.
-
-%% unaligned helpers
-
-%% 10.5.6 NOTE: If "range" satisfies the inequality 2^m < "range" =<
-%% 2^(m+1) then the number of bits = m + 1
-
-num_bits(N) ->
-    num_bits(N,1,0).
-num_bits(N,T,B) when N=<T->B;
-num_bits(N,T,B) ->num_bits(N,T bsl 1, B+1).

@@ -452,7 +452,7 @@ gen_encode_sof(Erule,Typename,SeqOrSetOf,D) when is_record(D,type) ->
 	    _->
 		""
 	end,
-    gen_encode_length(SizeConstraint, is_optimized(Erule)),
+    gen_encode_length(Erule,SizeConstraint, is_optimized(Erule)),
     emit({indent(3),"'enc_",asn1ct_gen:list2name(Typename),
 	      "_components'(Val",ObjFun,", [])"}),
     emit({nl,"].",nl}),
@@ -466,7 +466,7 @@ gen_encode_sof(Erule,Typename,SeqOrSetOf,D) when is_record(D,type) ->
 
 
 %% Logic copied from asn1_per_bin_rt2ct:encode_constrained_number
-gen_encode_length({Lb,Ub},true) when Ub =< 65535, Lb >= 0 ->
+gen_encode_length(_Erule,{Lb,Ub},true) when Ub =< 65535, Lb >= 0 ->
     Range = Ub - Lb + 1,
     V2 = ["(length(Val) - ",Lb,")"],
     Encode = if
@@ -496,9 +496,27 @@ gen_encode_length({Lb,Ub},true) when Ub =< 65535, Lb >= 0 ->
 		     {"?RT_PER:encode_length(",{asis,{Lb,Ub}},",length(Val))"}
 	     end,
     emit({nl,Encode,",",nl});
-gen_encode_length(SizeConstraint,_) ->
+gen_encode_length(Erule,SizeConstraint,_) ->
+    case Erule of
+        uper_bin ->
+            case SizeConstraint of
+                {Lb,Ub} when is_integer(Lb),is_integer(Ub) ->
+                     NewC = {Lb,Ub,num_bits(Ub-Lb+1)};
+                {{Lb,Ub},Ext} when is_integer(Lb),is_integer(Ub) ->
+                     NewC = {{Lb,Ub,num_bits(Ub-Lb+1)},Ext};
+                {{Lb,Ub},Ext} ->
+                     NewC = {{Lb,Ub,undefined},Ext};
+                {Lb,Ub} ->
+                     NewC = {Lb,Ub,undefined};
+                Sv when is_list(Sv) ->
+                     NewC = {Sv,num_bits(lists:max(Sv)-hd(Sv)+1)};
+                _ -> NewC = SizeConstraint
+             end;
+        _ ->
+            NewC = SizeConstraint
+    end,
     emit({nl,indent(3),"?RT_PER:encode_length(",
-	  {asis,SizeConstraint},",length(Val)),",nl}).
+	  {asis,NewC},",length(Val)),",nl}).
 
 gen_decode_sof(Erules,Typename,SeqOrSetOf,D) when is_record(D,type) ->
     asn1ct_name:start(),
@@ -516,7 +534,7 @@ gen_decode_sof(Erules,Typename,SeqOrSetOf,D) when is_record(D,type) ->
 	    _ ->
 		""
 	end,
-    gen_decode_length(SizeConstraint,
+    gen_decode_length(Erules,SizeConstraint,
 		      is_optimized(Erules)),
     emit({"'dec_",asn1ct_gen:list2name(Typename),
 	      "_components'(Num, Bytes1, telltype",ObjFun,", []).",nl}),
@@ -529,7 +547,7 @@ gen_decode_sof(Erules,Typename,SeqOrSetOf,D) when is_record(D,type) ->
     gen_decode_sof_components(Erules,Typename,SeqOrSetOf,NewComponentType).
 
 %% Logic copied from asn1_per_bin_rt2ct:decode_constrained_number
-gen_decode_length({Lb,Ub},true) when Ub =< 65535, Lb >= 0 ->
+gen_decode_length(_,{Lb,Ub},true) when Ub =< 65535, Lb >= 0 ->
     Range = Ub - Lb + 1,
     Call = if
 	       Range  == 1 ->
@@ -559,9 +577,26 @@ gen_decode_length({Lb,Ub},true) when Ub =< 65535, Lb >= 0 ->
 	   end,
     emit({nl,"{Val,Remain} = ",Call,",",nl}),
     emit({nl,"{Num,Bytes1} = {Val+",Lb,",Remain},",nl});
-gen_decode_length(SizeConstraint,_) ->
+gen_decode_length(Erules,SizeConstraint,_) ->
+    case Erules of
+        uper_bin ->
+             case SizeConstraint of
+                 {Lb,Ub} when is_integer(Lb),is_integer(Ub) ->
+                      NewC = {Lb,Ub,num_bits(Ub-Lb+1)};
+                 {{Lb,Ub},Ext} when is_integer(Lb),is_integer(Ub) ->
+                      NewC = {{Lb,Ub,num_bits(Ub-Lb+1)},Ext};
+                 {{Lb,Ub},Ext} ->
+                      NewC = {{Lb,Ub,undefined},Ext};
+                 {Lb,Ub} ->
+                      NewC = {Lb,Ub,undefined};
+                 Sv when is_list(Sv) ->
+                      NewC = {Sv,num_bits(lists:max(Sv)-hd(Sv)+1)};
+                 _ -> NewC = SizeConstraint
+             end;
+        _ -> NewC = SizeConstraint
+    end,
     emit({nl,"{Num,Bytes1} = ?RT_PER:decode_length(Bytes,",
-	  {asis,SizeConstraint},"),",nl}).
+	  {asis,NewC},"),",nl}).
 
 gen_encode_sof_components(Erule,Typename,SeqOrSetOf,Cont) ->
     {ObjFun,ObjFun_Var} =
@@ -1396,29 +1431,47 @@ gen_dec_line(Erule,TopType,Cname,Type,Pos,DecInfObj,Ext,Prop)  ->
     end.
 
 gen_enc_choice(Erule,TopType,CompList,Ext) ->
-    gen_enc_choice_tag(CompList, [], Ext),
+    gen_enc_choice_tag(Erule, CompList, [], Ext),
     emit({com,nl}),
     emit({"case element(1,Val) of",nl}),
     gen_enc_choice2(Erule,TopType, CompList, Ext),
     emit({nl,"end"}).
 
-gen_enc_choice_tag({C1,C2},_,_) ->
+gen_enc_choice_tag(Erule,{C1,C2},_,_) ->
     N1 = get_name_list(C1),
     N2 = get_name_list(C2),
+    case Erule of
+        uper_bin ->
+            NumBits = ", " ++ integer_to_list(num_bits(length(N1)));
+        _ ->
+            NumBits = ""
+    end,
     emit(["?RT_PER:set_choice(element(1,Val),",
-	  {asis,{N1,N2}},", ",{asis,{length(N1),length(N2)}},")"]);
+	  {asis,{N1,N2}},", ",{asis,{length(N1),length(N2)}},NumBits++")"]);
 
-gen_enc_choice_tag({C1,C2,C3},_,_) ->
+gen_enc_choice_tag(Erule,{C1,C2,C3},_,_) ->
     N1 = get_name_list(C1),
     N2 = get_name_list(C2),
     N3 = get_name_list(C3),
     Root = N1 ++ N3,
+    case Erule of
+        uper_bin ->
+            NumBits = ", " ++ integer_to_list(num_bits(length(Root)));
+        _ ->
+            NumBits = ""
+    end,
     emit(["?RT_PER:set_choice(element(1,Val),",
-	  {asis,{Root,N2}},", ",{asis,{length(Root),length(N2)}},")"]);
-gen_enc_choice_tag(C,_,_) ->
+	  {asis,{Root,N2}},", ",{asis,{length(Root),length(N2)}},NumBits++")"]);
+gen_enc_choice_tag(Erule,C,_,_) ->
     N = get_name_list(C),
+    case Erule of
+        uper_bin ->
+            NumBits = ", " ++ integer_to_list(num_bits(length(N)));
+        _ ->
+            NumBits = ""
+    end,
     emit(["?RT_PER:set_choice(element(1,Val),",
-	  {asis,N},", ",{asis,length(N)},")"]).
+	  {asis,N},", ",{asis,length(N)},NumBits++")"]).
 
 get_name_list(L) ->
     get_name_list(L,[]).
@@ -1494,9 +1547,14 @@ gen_dec_choice(Erule,TopType,CompList,noext) ->
     gen_dec_choice1(Erule,TopType,CompList,noext).
 
 gen_dec_choice1(Erule,TopType,CompList,noext) ->
+    case Erule of
+        uper_bin ->
+             NumBits = "," ++ integer_to_list(num_bits(length(CompList)));
+        _ -> NumBits = ""
+    end,
     emit({"{Choice,",{curr,bytes},
 	  "} = ?RT_PER:getchoice(",{prev,bytes},",",
-	  length(CompList),", 0),",nl}),
+	  length(CompList),",0"++NumBits++"),",nl}),
     emit({"{Cname,{Val,NewBytes}} = case Choice of",nl}),
     gen_dec_choice2(Erule,TopType,CompList,noext),
     emit({nl,"end,",nl}),
@@ -1508,9 +1566,14 @@ gen_dec_choice1(Erule,TopType,{RootList,ExtList,RootList2},Ext) ->
     NewList = RootList ++ RootList2 ++ ExtList,
     gen_dec_choice1(Erule,TopType, NewList, Ext);
 gen_dec_choice1(Erule,TopType,CompList,{ext,ExtPos,ExtNum}) ->
+    case Erule of
+        uper_bin ->
+             NumBits = "," ++ integer_to_list(num_bits(length(CompList)-ExtNum));
+        _ -> NumBits = ""
+    end,
     emit({"{Choice,",{curr,bytes},
 	  "} = ?RT_PER:getchoice(",{prev,bytes},",",
-	  length(CompList)-ExtNum,",Ext ),",nl}),
+	  length(CompList)-ExtNum,",Ext"++NumBits++"),",nl}),
     emit({"{Cname,{Val,NewBytes}} = case Choice + Ext*",ExtPos-1," of",nl}),
     gen_dec_choice2(Erule,TopType,CompList,{ext,ExtPos,ExtNum}),
     case Erule of
@@ -1687,3 +1750,13 @@ is_optimized(per_bin) ->
     lists:member(optimize,get(encoding_options));
 is_optimized(_Erule) ->
     false.
+
+%% unaligned helpers
+
+%% 10.5.6 NOTE: If "range" satisfies the inequality 2^m < "range" =<
+%% 2^(m+1) then the number of bits = m + 1
+
+num_bits(N) ->
+    num_bits(N,1,0).
+num_bits(N,T,B) when N=<T->B;
+num_bits(N,T,B) ->num_bits(N,T bsl 1, B+1).

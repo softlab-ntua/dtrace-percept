@@ -142,22 +142,40 @@ gen_encode_prim(Erules,D,DoTag) ->
 
 gen_encode_prim(Erules,D,DoTag,Value) when is_record(D,type) ->
     Constraint = D#type.constraint,
+    case Erules of
+        uper_bin ->
+            case get_constraint(Constraint,'SizeConstraint') of
+                {Lb,Ub} when is_integer(Lb),is_integer(Ub) ->
+                     NewCs = lists:keyreplace('SizeConstraint',1,Constraint,{'SizeConstraint',{Lb,Ub,num_bits(Ub-Lb+1)}});
+                {{Lb,Ub},Ext} when is_integer(Lb),is_integer(Ub) ->
+                     NewCs = lists:keyreplace('SizeConstraint',1,Constraint,{'SizeConstraint',{{Lb,Ub,num_bits(Ub-Lb+1)},Ext}});
+                {{Lb,Ub},Ext} ->
+                     NewCs = lists:keyreplace('SizeConstraint',1,Constraint,{'SizeConstraint',{{Lb,Ub,undefined},Ext}});
+                {Lb,Ub} ->
+                     NewCs = lists:keyreplace('SizeConstraint',1,Constraint,{'SizeConstraint',{Lb,Ub,undefined}});
+                Sv when is_list(Sv) ->
+                     NewCs = lists:keyreplace('SizeConstraint',1,Constraint,{'SizeConstraint',{Sv,num_bits(lists:max(Sv)-hd(Sv)+1)}});
+                _ -> NewCs = Constraint
+             end;
+        _ -> NewCs = Constraint
+    end,
     asn1ct_name:new(enumval),
     case D#type.def of
 	'INTEGER' ->
 	    emit({"?RT_PER:encode_integer(", %fel
-		  {asis,effective_constraint(integer,Constraint)},",",Value,")"});
+		  {asis,effective_constraint(Erules,integer,Constraint)},",",Value,")"});
 	{'INTEGER',NamedNumberList} ->
 	    emit({"?RT_PER:encode_integer(",
-		  {asis,effective_constraint(integer,Constraint)},",",Value,",",
+		  {asis,effective_constraint(Erules,integer,Constraint)},",",Value,",",
 		  {asis,NamedNumberList},")"});
 	{'ENUMERATED',{Nlist1,Nlist2}} ->
 	    NewList = lists:concat([[{0,X}||{X,_} <- Nlist1],['EXT_MARK'],[{1,X}||{X,_} <- Nlist2]]),
-	    NewC = [{'ValueRange',{0,length(Nlist1)-1}}],
 	    case Erules of
 		uper_bin ->
+		    NewC = [{'ValueRange',{0,length(Nlist1)-1,num_bits(length(Nlist1))}}],
 		    emit(["case ",Value," of",nl]);
 		_ ->
+		    NewC = [{'ValueRange',{0,length(Nlist1)-1}}],
 		    emit(["case (case ",Value," of {_,",{curr,enumval},"}-> ",
 			  {curr,enumval},";_->", Value," end) of",nl]),
 		    asn1ct_name:new(enumval)
@@ -166,11 +184,12 @@ gen_encode_prim(Erules,D,DoTag,Value) when is_record(D,type) ->
 	    emit_enc_enumerated_cases(Erules,NewC, NewList, 0);
 	{'ENUMERATED',NamedNumberList} ->
 	    NewList = [X||{X,_} <- NamedNumberList],
-	    NewC = [{'ValueRange',{0,length(NewList)-1}}],
 	    case Erules of
 		uper_bin ->
+		    NewC = [{'ValueRange',{0,length(NewList)-1,num_bits(length(NewList))}}],
 		    emit(["case ",Value," of",nl]);
 		_ ->
+		    NewC = [{'ValueRange',{0,length(NewList)-1}}],
 		    emit(["case (case ",Value," of {_,",{curr,enumval},
 			  "}->",{curr,enumval},";_->",Value," end) of",nl])
 	    end,
@@ -181,7 +200,7 @@ gen_encode_prim(Erules,D,DoTag,Value) when is_record(D,type) ->
 
 	{'BIT STRING',NamedNumberList} ->
 	    emit({"?RT_PER:encode_bit_string(",
-		  {asis,Constraint},",",Value,",",
+		  {asis,NewCs},",",Value,",",
 		  {asis,NamedNumberList},")"});
 	'NULL' ->
 	    emit({"?RT_PER:encode_null(",Value,")"});
@@ -195,9 +214,9 @@ gen_encode_prim(Erules,D,DoTag,Value) when is_record(D,type) ->
 	'BOOLEAN' ->
 	    emit({"?RT_PER:encode_boolean(",Value,")"});
 	'OCTET STRING' ->
-	    emit({"?RT_PER:encode_octet_string(",{asis,Constraint},",",Value,")"});
+	    emit({"?RT_PER:encode_octet_string(",{asis,NewCs},",",Value,")"});
 	'NumericString' ->
-	    emit({"?RT_PER:encode_NumericString(",{asis,Constraint},",",Value,")"});
+	    emit({"?RT_PER:encode_NumericString(",{asis,NewCs},",",Value,")"});
 	TString when TString == 'TeletexString';
 		     TString == 'T61String' ->
 	    emit({"?RT_PER:encode_TeletexString(",{asis,Constraint},",",Value,")"});
@@ -210,21 +229,21 @@ gen_encode_prim(Erules,D,DoTag,Value) when is_record(D,type) ->
 	'GraphicString' ->
 	    emit({"?RT_PER:encode_GraphicString(",{asis,Constraint},",",Value,")"});
 	'VisibleString' ->
-	    emit({"?RT_PER:encode_VisibleString(",{asis,Constraint},",",Value,")"});
+	    emit({"?RT_PER:encode_VisibleString(",{asis,NewCs},",",Value,")"});
 	'GeneralString' ->
 	    emit({"?RT_PER:encode_GeneralString(",{asis,Constraint},
 		  ",",Value,")"});
 	'PrintableString' ->
-	    emit({"?RT_PER:encode_PrintableString(",{asis,Constraint},
+	    emit({"?RT_PER:encode_PrintableString(",{asis,NewCs},
 		  ",",Value,")"});
 	'IA5String' ->
-	    emit({"?RT_PER:encode_IA5String(",{asis,Constraint},
+	    emit({"?RT_PER:encode_IA5String(",{asis,NewCs},
 		  ",",Value,")"});
 	'BMPString' ->
-	    emit({"?RT_PER:encode_BMPString(",{asis,Constraint},
+	    emit({"?RT_PER:encode_BMPString(",{asis,NewCs},
 		  ",",Value,")"});
 	'UniversalString' ->
-	    emit({"?RT_PER:encode_UniversalString(",{asis,Constraint},
+	    emit({"?RT_PER:encode_UniversalString(",{asis,NewCs},
 		  ",",Value,")"});
 	'UTF8String' ->
 	    emit({"?RT_PER:encode_UTF8String(",Value,")"});
@@ -308,18 +327,23 @@ emit_enc_enumerated_case(_Erule, C, EnumName, Count) ->
 %% returns a value range that has the lower bound set to the lowest value 
 %% of all single values and lower bound values in C and the upper bound to
 %% the greatest value.
-effective_constraint(integer,[C={{_,_},_}|_Rest]) -> % extension
-    [C]; %% [C|effective_constraint(integer,Rest)]; XXX what is possible ???
-effective_constraint(integer,C) ->
+effective_constraint(Erule,integer,[C={{Tag,{Lb,Ub}},Ext}|_Rest]) -> % extension
+    case Erule of
+        uper_bin when is_integer(Lb),is_integer(Ub) ->
+            [{{Tag,{Lb,Ub,num_bits(Ub-Lb+1)}},Ext}];
+        _ ->
+            [C] %% [C|effective_constraint(integer,Rest)]; XXX what is possible ???
+    end;
+effective_constraint(Erule,integer,C) ->
     SVs = get_constraints(C,'SingleValue'),
-    SV = effective_constr('SingleValue',SVs),
+    SV = effective_constr(Erule,'SingleValue',SVs),
     VRs = get_constraints(C,'ValueRange'),
-    VR = effective_constr('ValueRange',VRs),
-    greatest_common_range(SV,VR).
+    VR = effective_constr(Erule,'ValueRange',VRs),
+    greatest_common_range(Erule,SV,VR).
 
-effective_constr(_,[]) ->
+effective_constr(_,_,[]) ->
     [];
-effective_constr('SingleValue',List) ->
+effective_constr(Erule,'SingleValue',List) ->
     SVList = lists:flatten(lists:map(fun(X)->element(2,X)end,List)),
     %% Sort and remove duplicates before generating SingleValue or ValueRange
     %% In case of ValueRange, also check for 'MIN and 'MAX'
@@ -327,36 +351,67 @@ effective_constr('SingleValue',List) ->
 	[N] ->
 	    [{'SingleValue',N}];
 	L when is_list(L) ->
-	    [{'ValueRange',{least_Lb(L),greatest_Ub(L)}}]
+	    case {least_Lb(L),greatest_Ub(L)} of
+	        {Lb,Ub} when is_integer(Lb),is_integer(Ub),Erule==uper_bin ->
+	            [{'ValueRange',{Lb,Ub,num_bits(Ub-Lb+1)}}];
+	        {Lb,Ub} ->
+	            [{'ValueRange',{Lb,Ub}}]
+	    end
     end;
-effective_constr('ValueRange',List) ->
+effective_constr(Erule,'ValueRange',List) ->
     LBs = lists:map(fun({_,{Lb,_}})-> Lb end,List),
     UBs = lists:map(fun({_,{_,Ub}})-> Ub end,List),
     Lb = least_Lb(LBs),
-    [{'ValueRange',{Lb,lists:max(UBs)}}].
+    case {Lb,lists:max(UBs)} of
+        {Lb,Ub} when is_integer(Lb),is_integer(Ub),Erule==uper_bin ->
+            [{'ValueRange',{Lb,Ub,num_bits(Ub-Lb+1)}}];
+        {Lb,Ub} ->
+            [{'ValueRange',{Lb,Ub}}]
+    end.
 
-greatest_common_range([],VR) ->
+greatest_common_range(_,[],VR) ->
     VR;
-greatest_common_range(SV,[]) ->
+greatest_common_range(_,SV,[]) ->
     SV;
-greatest_common_range(SV,VR) ->
-    greatest_common_range2(mk_vr(SV),mk_vr(VR)).
-greatest_common_range2({_,Int},{'MIN',Ub}) when is_integer(Int),
+greatest_common_range(Erule,SV,VR) ->
+    greatest_common_range2(Erule,mk_vr(SV),mk_vr(VR)).
+greatest_common_range2(_,{_,Int},{'MIN',Ub}) when is_integer(Int),
 						       Int > Ub ->
     [{'ValueRange',{'MIN',Int}}];
-greatest_common_range2({_,Int},{Lb,Ub}) when is_integer(Int),
+greatest_common_range2(Erule,{_,Int},{Lb,Ub}) when is_integer(Int),
 						    Int < Lb ->
-    [{'ValueRange',{Int,Ub}}];
-greatest_common_range2({_,Int},VR={_Lb,_Ub}) when is_integer(Int) ->
-    [{'ValueRange',VR}];
-greatest_common_range2({_,L},{Lb,Ub}) when is_list(L) ->
+    case Ub of
+        Ub when is_integer(Ub),Erule==uper_bin ->
+            [{'ValueRange',{Int,Ub,num_bits(Ub-Int+1)}}];
+        Ub ->
+            [{'ValueRange',{Int,Ub}}]
+    end;
+greatest_common_range2(Erule,{_,Int},VR={Lb,Ub}) when is_integer(Int) ->
+    case VR of
+        {Lb,Ub} when is_integer(Lb),is_integer(Ub),Erule==uper_bin ->
+            [{'ValueRange',VR,num_bits(Ub-Lb+1)}];
+        {Lb,Ub} ->
+            [{'ValueRange',VR}]
+    end;
+greatest_common_range2(Erule,{_,L},{Lb,Ub}) when is_list(L) ->
     Min = least_Lb([Lb|L]),
     Max = greatest_Ub([Ub|L]),
-    [{'ValueRange',{Min,Max}}];
-greatest_common_range2({Lb1,Ub1},{Lb2,Ub2}) ->
+    case {Min,Max} of
+        {Min,Max} when is_integer(Min),is_integer(Max),Erule==uper_bin ->
+            [{'ValueRange',{Min,Max,num_bits(Max-Min+1)}}];
+        {Min,Max} ->
+            [{'ValueRange',{Min,Max}}]
+    end;
+greatest_common_range2(Erule,{Lb1,Ub1},{Lb2,Ub2}) ->
     Min = least_Lb([Lb1,Lb2]),
     Max = greatest_Ub([Ub1,Ub2]),
-    [{'ValueRange',{Min,Max}}].
+    case {Min,Max} of
+        {Min,Max} when is_integer(Min),is_integer(Max),Erule==uper_bin ->
+            [{'ValueRange',{Min,Max,num_bits(Max-Min+1)}}];
+        {Min,Max} ->
+            [{'ValueRange',{Min,Max}}]
+    end.
+
 
 mk_vr([{Type,I}]) when is_atom(Type), is_integer(I) ->
     {I,I};
@@ -385,6 +440,18 @@ get_constraints([],_) ->
 get_constraints(C,Key) ->
     {value,L} = keysearch_allwithkey(Key,1,C,[]),
     L.
+
+get_constraint([{Key,V}],Key) ->
+    V;
+get_constraint([],_Key) ->
+    no;
+get_constraint(C,Key) ->
+    case lists:keysearch(Key,1,C) of
+	false ->
+	    no;
+	{value,{_,V}} ->
+	    V
+    end.
 
 keysearch_allwithkey(Key,Ix,C,Acc) ->
     case lists:keysearch(Key,Ix,C) of
@@ -1232,13 +1299,30 @@ gen_decode_user(Erules,D) when is_record(D,typedef) ->
 gen_dec_prim(Erules,Att,BytesVar) ->
     Typename = Att#type.def,
     Constraint = Att#type.constraint,
+    case Erules of
+        uper_bin ->
+            case get_constraint(Constraint,'SizeConstraint') of
+                {Lb,Ub} when is_integer(Lb),is_integer(Ub) ->
+                     NewCs = lists:keyreplace('SizeConstraint',1,Constraint,{'SizeConstraint',{Lb,Ub,num_bits(Ub-Lb+1)}});
+                {{Lb,Ub},Ext} when is_integer(Lb),is_integer(Ub) ->
+                     NewCs = lists:keyreplace('SizeConstraint',1,Constraint,{'SizeConstraint',{{Lb,Ub,num_bits(Ub-Lb+1)},Ext}});
+                {{Lb,Ub},Ext} ->
+                     NewCs = lists:keyreplace('SizeConstraint',1,Constraint,{'SizeConstraint',{{Lb,Ub,undefined},Ext}});
+                {Lb,Ub} ->
+                     NewCs = lists:keyreplace('SizeConstraint',1,Constraint,{'SizeConstraint',{Lb,Ub,undefined}});
+                Sv when is_list(Sv) ->
+                     NewCs = lists:keyreplace('SizeConstraint',1,Constraint,{'SizeConstraint',{Sv,num_bits(lists:max(Sv)-hd(Sv)+1)}});
+                _ -> NewCs = Constraint
+             end;
+        _ -> NewCs = Constraint
+    end,
     case Typename of
 	'INTEGER' ->
 	    emit({"?RT_PER:decode_integer(",BytesVar,",",
-		  {asis,effective_constraint(integer,Constraint)},")"});
+		  {asis,effective_constraint(Erules,integer,Constraint)},")"});
 	{'INTEGER',NamedNumberList} ->
 	    emit({"?RT_PER:decode_integer(",BytesVar,",",
-		  {asis,effective_constraint(integer,Constraint)},",",
+		  {asis,effective_constraint(Erules,integer,Constraint)},",",
 		  {asis,NamedNumberList},")"});
 
 	'REAL' ->
@@ -1248,11 +1332,11 @@ gen_dec_prim(Erules,Att,BytesVar) ->
 	    case get(compact_bit_string) of
 		true ->
 		    emit({"?RT_PER:decode_compact_bit_string(",
-			  BytesVar,",",{asis,Constraint},",",
+			  BytesVar,",",{asis,NewCs},",",
 			  {asis,NamedNumberList},")"});
 		_ ->
 		    emit({"?RT_PER:decode_bit_string(",BytesVar,",",
-			  {asis,Constraint},",",
+			  {asis,NewCs},",",
 			  {asis,NamedNumberList},")"})
 	    end;
 	'NULL' ->
@@ -1270,13 +1354,21 @@ gen_dec_prim(Erules,Att,BytesVar) ->
 	{'ENUMERATED',{NamedNumberList1,NamedNumberList2}} ->
 	    NewTup = {list_to_tuple([X||{X,_} <- NamedNumberList1]),
 		      list_to_tuple([X||{X,_} <- NamedNumberList2])},
-	    NewC = [{'ValueRange',{0,size(element(1,NewTup))-1}}],
+	    case Erules of
+	        uper_bin ->
+	             NewC = [{'ValueRange',{0,size(element(1,NewTup))-1,num_bits(size(element(1,NewTup)))}}];
+	        _ -> NewC = [{'ValueRange',{0,size(element(1,NewTup))-1}}]
+	    end,
 	    emit({"?RT_PER:decode_enumerated(",BytesVar,",",
 		  {asis,NewC},",",
 		  {asis,NewTup},")"});
 	{'ENUMERATED',NamedNumberList} ->
 	    NewTup = list_to_tuple([X||{X,_} <- NamedNumberList]),
-	    NewC = [{'ValueRange',{0,size(NewTup)-1}}],
+	    case Erules of
+	        uper_bin ->
+	             NewC = [{'ValueRange',{0,size(NewTup)-1,num_bits(size(NewTup))}}];
+	        _ -> NewC = [{'ValueRange',{0,size(NewTup)-1}}]
+	    end,
 	    emit({"?RT_PER:decode_enumerated(",BytesVar,",",
 		  {asis,NewC},",",
 		  {asis,NewTup},")"});
@@ -1284,10 +1376,10 @@ gen_dec_prim(Erules,Att,BytesVar) ->
 	    emit({"?RT_PER:decode_boolean(",BytesVar,")"});
 	'OCTET STRING' ->
 	    emit({"?RT_PER:decode_octet_string(",BytesVar,",",
-		  {asis,Constraint},")"});
+		  {asis,NewCs},")"});
 	'NumericString' ->
 	    emit({"?RT_PER:decode_NumericString(",BytesVar,",",
-		  {asis,Constraint},")"});
+		  {asis,NewCs},")"});
 	TString when TString == 'TeletexString';
 		     TString == 'T61String' ->
 	    emit({"?RT_PER:decode_TeletexString(",BytesVar,",",
@@ -1306,20 +1398,20 @@ gen_dec_prim(Erules,Att,BytesVar) ->
 		  {asis,Constraint},")"});
 	'VisibleString' ->
 	    emit({"?RT_PER:decode_VisibleString(",BytesVar,",",
-		  {asis,Constraint},")"});
+		  {asis,NewCs},")"});
 	'GeneralString' ->
 	    emit({"?RT_PER:decode_GeneralString(",BytesVar,",",
 		  {asis,Constraint},")"});
 	'PrintableString' ->
-	    emit({"?RT_PER:decode_PrintableString(",BytesVar,",",{asis,Constraint},")"});
+	    emit({"?RT_PER:decode_PrintableString(",BytesVar,",",{asis,NewCs},")"});
 	'IA5String' ->
-	    emit({"?RT_PER:decode_IA5String(",BytesVar,",",{asis,Constraint},")"});
+	    emit({"?RT_PER:decode_IA5String(",BytesVar,",",{asis,NewCs},")"});
 	'BMPString' ->
 	    emit({"?RT_PER:decode_BMPString(",BytesVar,",",
-		  {asis,Constraint},")"});
+		  {asis,NewCs},")"});
 	'UniversalString' ->
 	    emit({"?RT_PER:decode_UniversalString(",BytesVar,
-		  ",",{asis,Constraint},")"});
+		  ",",{asis,NewCs},")"});
 	'UTF8String' ->
 	    emit({"?RT_PER:decode_UTF8String(",BytesVar,")"});
 	'ANY' ->
@@ -1417,3 +1509,13 @@ extaddgroup2sequence([C|T],ExtNum,Acc) ->
     extaddgroup2sequence(T,ExtNum,[C|Acc]);
 extaddgroup2sequence([],_,Acc) ->
     lists:reverse(Acc).
+
+%% unaligned helpers
+
+%% 10.5.6 NOTE: If "range" satisfies the inequality 2^m < "range" =<
+%% 2^(m+1) then the number of bits = m + 1
+
+num_bits(N) ->
+    num_bits(N,1,0).
+num_bits(N,T,B) when N=<T->B;
+num_bits(N,T,B) ->num_bits(N,T bsl 1, B+1).
