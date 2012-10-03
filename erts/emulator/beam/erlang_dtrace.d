@@ -699,6 +699,14 @@ provider erlang {
      */
     probe efile_drv__return(int, int, char *, int, int, int);
 
+    /**
+     * Trace something for percept.
+     *
+     * @param trace the trace.
+     *
+     */
+    probe percept__trace(char *);
+
 /*
  * NOTE:
  * For formatting int64_t arguments within a D script, see:
