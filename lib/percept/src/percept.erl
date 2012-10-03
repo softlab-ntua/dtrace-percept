@@ -35,6 +35,7 @@
 	stop_webserver/0, 
 	stop_webserver/1, 
 	analyze/1,
+    d_analyze/1,
 	% Application behaviour
 	start/2, 
 	stop/1]).
@@ -132,6 +133,20 @@ analyze(Filename) ->
 	    parse_and_insert(Filename,DB);
 	{restarted, DB} ->
 	    parse_and_insert(Filename,DB)
+    end.
+
+%% @spec d_analyze(string()) -> ok | {error, Reason}
+%% @doc Analyze DTrace file.
+
+-spec d_analyze(Filename :: file:filename()) ->
+    'ok' | {'error', any()}.
+
+d_analyze(Filename) ->
+    case percept_db:start() of
+    {started, DB} ->
+        d_parse_and_insert(Filename,DB);
+    {restarted, DB} ->
+        d_parse_and_insert(Filename,DB)
     end.
 
 %% @spec start_webserver() -> {started, Hostname, Port} | {error, Reason}
@@ -343,3 +358,28 @@ get_webserver_config(Servername, Port) when is_list(Servername), is_integer(Port
 	{bind_address, any},
 	{port, Port}],
     {ok, Config}.
+
+%% d_parse_and_insert
+
+d_parse_and_insert(Filename, DB) ->
+    io:format("Parsing: ~p ~n", [Filename]),
+    T0 = erlang:now(),
+    case file:consult(Filename) of
+        {ok, Ts}        -> d_send_loop(Ts, DB, T0, 0);
+        {error, Reason} -> {error, Reason}
+    end.
+
+d_send_loop([], DB, T0, Count) ->
+    DB ! {action, consolidate},
+    T1 = erlang:now(),
+    io:format("Parsed ~p entries in ~p s.~n", [Count, ?seconds(T1, T0)]),
+    io:format("    ~p created processes.~n", [length(percept_db:select({information, procs}))]),
+    io:format("    ~p opened ports.~n", [length(percept_db:select({information, ports}))]),
+    ok;
+d_send_loop([T|Ts], DB, T0, Count) ->
+    M = {insert, case is_binary(T) of
+            true -> binary_to_term(T);
+            false -> T
+        end},
+    DB ! M,
+    d_send_loop(Ts, DB, T0, Count+1).
