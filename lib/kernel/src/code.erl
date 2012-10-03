@@ -293,6 +293,9 @@ replace_path(Name, Dir) when (is_atom(Name) orelse is_list(Name)),
 -spec rehash() -> 'ok'.
 rehash() -> call(rehash).
 
+-spec get_mode() -> 'embedded' | 'interactive' | 'minimal'.
+get_mode() -> call(get_mode).
+
 %%-----------------------------------------------------------------
 
 call(Req) ->
