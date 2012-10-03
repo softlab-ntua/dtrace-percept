@@ -1,0 +1,25 @@
+probe process("beam.smp").begin
+{
+    us = gettimeofday_us(); 
+    s = us / 1000000;
+    us = us % 1000000;
+    ms = s / 1000000;
+    s = s % 1000000;
+    printf("{profile_start, {%d,%d,%d}}.\n", ms, s, us);
+}
+
+probe process("beam.smp").mark("percept__trace")
+{
+    println(user_string($arg1));
+}
+
+probe process("beam.smp").end
+{
+    us = gettimeofday_us();
+    s = us / 1000000;
+    us = us % 1000000;
+    ms = s / 1000000;
+    s = s % 1000000;
+    printf("{profile_stop, {%d,%d,%d}}.\n", ms, s, us);
+}
+
