@@ -1431,7 +1431,9 @@ void erts_trace_exception(Process* p, BeamInstr mfa[], Eterm class, Eterm value,
 void erts_trace_return_to(Process *p, BeamInstr *pc);
 void trace_sched(Process*, Eterm);
 void trace_proc(Process*, Process*, Eterm, Eterm);
+void d_trace_proc(Process*, Process*, Eterm, Eterm);
 void trace_proc_spawn(Process*, Eterm pid, Eterm mod, Eterm func, Eterm args);
+void d_trace_proc_spawn(Process*, Eterm pid, Eterm mod, Eterm func, Eterm args);
 void save_calls(Process *p, Export *);
 void trace_gc(Process *p, Eterm what);
 /* port tracing */
@@ -1447,6 +1449,7 @@ Eterm erts_get_system_profile(void);
 void profile_scheduler(Eterm scheduler_id, Eterm);
 void profile_scheduler_q(Eterm scheduler_id, Eterm state, Eterm no_schedulers, Uint Ms, Uint s, Uint us);
 void profile_runnable_proc(Process* p, Eterm status);
+void d_profile_runnable_proc(Process* p, Eterm status);
 void profile_runnable_port(Port* p, Eterm status);
 void erts_system_profile_setup_active_schedulers(void);
 

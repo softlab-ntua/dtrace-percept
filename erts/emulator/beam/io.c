@@ -2104,6 +2104,9 @@ static void sweep_one_link(ErtsLink *lnk, void *vpsc)
 			trace_proc(NULL, rp, am_getting_unlinked,
 				   psc->port);
 		    }
+            if (DTRACE_ENABLED(percept_trace)) {
+                d_trace_proc(NULL, rp, am_getting_unlinked, psc->port);
+            }
 		}
 		erts_destroy_link(rlnk);
 	    }

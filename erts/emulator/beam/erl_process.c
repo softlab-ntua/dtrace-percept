@@ -4271,6 +4271,9 @@ suspend_process(ErtsRunQueue *rq, Process *p)
     if ((erts_system_profile_flags.runnable_procs) && (p->rcount == 1) && (p->status != P_WAITING)) {
         profile_runnable_proc(p, am_inactive);
     }
+    if (DTRACE_ENABLED(percept_trace) && (p->rcount == 1) && (p->status != P_WAITING)) {
+        d_profile_runnable_proc(p, am_inactive);
+    }
 
     p->status = P_SUSPENDED;
     
@@ -6190,6 +6193,11 @@ internal_add_to_runq(ErtsRunQueue *runq, Process *p)
 	    || prev_status == P_SUSPENDED)) {
     	profile_runnable_proc(p, am_active);
     }
+    if ((DTRACE_ENABLED(percept_trace))
+    && (prev_status == P_WAITING
+        || prev_status == P_SUSPENDED)) {
+        d_profile_runnable_proc(p, am_active);
+    }
 
     if (add_runq != runq)
 	erts_smp_runq_unlock(add_runq);
@@ -6231,6 +6239,9 @@ remove_proc_from_runq(ErtsRunQueue *rq, Process *p, int to_inactive)
 
     if (res && erts_system_profile_flags.runnable_procs && to_inactive)
 	profile_runnable_proc(p, am_inactive);
+    if (res && DTRACE_ENABLED(percept_trace) && to_inactive) {
+        d_profile_runnable_proc(p, am_active);
+    }
 
 #ifdef ERTS_SMP
     ASSERT(!(p->status_flags & ERTS_PROC_SFLG_INRUNQ));
@@ -6627,6 +6638,10 @@ Process *schedule(Process *p, int calls)
 	    && (p->status == P_WAITING)) {
 	    profile_runnable_proc(p, am_inactive);
 	}
+    if (DTRACE_ENABLED(percept_trace)
+        && (p->status == P_WAITING)) {
+        d_profile_runnable_proc(p, am_inactive);
+    }
 
 	if (IS_TRACED(p)) {
 	    if (IS_TRACED_FL(p, F_TRACE_CALLS) &&  p->status != P_FREE) {
@@ -7606,6 +7621,9 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
 	if (IS_TRACED_FL(parent, F_TRACE_PROCS)) {
 	    trace_proc(parent, parent, am_link, p->id);
 	}
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_trace_proc(parent, parent, am_link, p->id);
+    }
 
 #ifdef DEBUG
 	ret = erts_add_link(&(parent->nlinks),  LINK_PID, p->id);
@@ -7695,6 +7713,9 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
 
         dtrace_fun_decode(p, mod, func, arity, process_name, mfa);
         DTRACE2(process_spawn, process_name, mfa);
+    }
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_trace_proc_spawn(parent, p->id, mod, func, args);
     }
 #endif
 
@@ -8612,6 +8633,9 @@ static void doit_exit_link(ErtsLink *lnk, void *vpcontext)
 			if (IS_TRACED_FL(rp, F_TRACE_PROCS)) {
 			    trace_proc(p, rp, am_getting_unlinked, p->id);
 			}
+            if (DTRACE_ENABLED(percept_trace)) {
+                d_trace_proc(p, rp, am_getting_unlinked, p->id);
+            }
 		    }
 		}
 		ASSERT(rp != p);
@@ -8714,6 +8738,9 @@ erts_do_exit_process(Process* p, Eterm reason)
     if (erts_system_profile_flags.runnable_procs && (p->status != P_WAITING)) {
     	profile_runnable_proc(p, am_inactive);
     }
+    if (DTRACE_ENABLED(percept_trace) && (p->status != P_WAITING)) {
+        d_profile_runnable_proc(p, am_inactive);
+    }
 
 #ifdef ERTS_SMP
     erts_pix_lock(pix_lock);
@@ -8745,6 +8772,9 @@ erts_do_exit_process(Process* p, Eterm reason)
 
 	if (IS_TRACED_FL(p,F_TRACE_PROCS))
 	    trace_proc(p, p, am_exit, reason);
+    }
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_trace_proc(p, p, am_exit, reason);
     }
 
     erts_trace_check_exiting(p->id);

@@ -121,6 +121,9 @@ static int insert_internal_link(Process* p, Eterm rpid)
     }
     if (IS_TRACED_FL(rp, F_TRACE_PROCS))
 	trace_proc(p, rp, am_getting_linked, p->id);
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_trace_proc(p, rp, am_getting_linked, p->id);
+    }
 
     if (p == rp)
 	erts_smp_proc_unlock(p, rp_locks & ~ERTS_PROC_LOCK_MAIN);
@@ -140,6 +143,9 @@ BIF_RETTYPE link_1(BIF_ALIST_1)
 
     if (IS_TRACED_FL(BIF_P, F_TRACE_PROCS)) {
 	trace_proc(BIF_P, BIF_P, am_link, BIF_ARG_1);
+    }
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_trace_proc(BIF_P, BIF_P, am_link, BIF_ARG_1);
     }
     /* check that the pid or port which is our argument is OK */
 
@@ -937,6 +943,9 @@ BIF_RETTYPE unlink_1(BIF_ALIST_1)
     if (IS_TRACED_FL(BIF_P, F_TRACE_PROCS)) {
 	trace_proc(BIF_P, BIF_P, am_unlink, BIF_ARG_1);
     }
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_trace_proc(BIF_P, BIF_P, am_unlink, BIF_ARG_1);
+    }
 
     if (is_internal_port(BIF_ARG_1)) {
 	Port *pt = erts_id2port_sflgs(BIF_ARG_1,
@@ -1072,6 +1081,9 @@ BIF_RETTYPE unlink_1(BIF_ALIST_1)
 	if (IS_TRACED_FL(rp, F_TRACE_PROCS) && rl != NULL) {
 	    trace_proc(BIF_P, rp, am_getting_unlinked, BIF_P->id);
 	}
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_trace_proc(BIF_P, rp, am_getting_unlinked, BIF_P->id);
+    }
 
 	if (rp != BIF_P)
 	    erts_smp_proc_unlock(rp, ERTS_PROC_LOCK_LINK);
@@ -1863,6 +1875,9 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend) {
 	if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
 	    profile_runnable_proc(p, am_inactive);
 	}
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_profile_runnable_proc(p, am_inactive);
+    }
 	erts_whereis_name(p, ERTS_PROC_LOCK_MAIN,
 			  to,
 			  &rp, 0, ERTS_P2P_FLG_SMP_INC_REFC,
@@ -1880,6 +1895,9 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend) {
 	if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
 	    profile_runnable_proc(p, am_active);
 	}
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_profile_runnable_proc(p, am_active);
+    }
 
 	if (IS_TRACED(p))
 	    trace_send(p, to, msg);
@@ -1912,6 +1930,9 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend) {
 	if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
 	    profile_runnable_proc(p, am_inactive);
 	}
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_profile_runnable_proc(p, am_inactive);
+    }
 	pt = erts_id2port(to, p, ERTS_PROC_LOCK_MAIN);
       port_common:
 	ERTS_SMP_LC_ASSERT(!pt || erts_lc_is_port_locked(pt));
@@ -1977,6 +1998,9 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend) {
 	if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
 	    profile_runnable_proc(p, am_active);
 	}
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_profile_runnable_proc(p, am_active);
+    }
 	if (ERTS_PROC_IS_EXITING(p)) {
 	    KILL_CATCHES(p); /* Must exit */
 	    return SEND_USER_ERROR;
@@ -2014,6 +2038,9 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend) {
 	    if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
 	    	profile_runnable_proc(p, am_inactive);
 	    }
+        if (DTRACE_ENABLED(percept_trace)) {
+            d_profile_runnable_proc(p, am_inactive);
+        }
 
 	    erts_whereis_name(p, ERTS_PROC_LOCK_MAIN,
 			      tp[1],
@@ -2033,6 +2060,9 @@ do_send(Process *p, Eterm to, Eterm msg, int suspend) {
 	    if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
 	    	profile_runnable_proc(p, am_active);
 	    }
+        if (DTRACE_ENABLED(percept_trace)) {
+            d_profile_runnable_proc(p, am_active);
+        }
 
 	    if (!rp) {
 		return 0;

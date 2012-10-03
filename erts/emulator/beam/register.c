@@ -229,6 +229,9 @@ int erts_register_name(Process *c_p, Eterm name, Eterm id)
 	if (IS_TRACED_FL(proc, F_TRACE_PROCS)) {
 	    trace_proc(c_p, proc, am_register, name);
 	}
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_trace_proc(c_p, proc, am_register, name);
+    }
 	proc->reg = rp;
     }
     else if (port && rp->pt == port) {
@@ -555,6 +558,9 @@ int erts_unregister_name(Process *c_p,
 	    if (IS_TRACED_FL(rp->p, F_TRACE_PROCS)) {
 		trace_proc(c_p, rp->p, am_unregister, r.name);
 	    }
+        if (DTRACE_ENABLED(percept_trace)) {
+            d_trace_proc(c_p, rp->p, am_unregister, r.name);
+        }
 #ifdef ERTS_SMP
 	    if (rp->p != c_p) {
 		erts_smp_proc_unlock(rp->p, ERTS_PROC_LOCK_MAIN);

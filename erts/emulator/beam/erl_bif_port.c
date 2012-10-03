@@ -136,6 +136,9 @@ do_port_command(Process *BIF_P, Eterm arg1, Eterm arg2, Eterm arg3,
     if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
     	profile_runnable_proc(BIF_P, am_inactive);
     }
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_profile_runnable_proc(BIF_P, am_inactive);
+    }
 
     p = id_or_name2port(BIF_P, arg1);
     if (!p) {
@@ -145,6 +148,9 @@ do_port_command(Process *BIF_P, Eterm arg1, Eterm arg2, Eterm arg3,
     	if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
     	    profile_runnable_proc(BIF_P, am_active);
     	}
+        if (DTRACE_ENABLED(percept_trace)) {
+            d_profile_runnable_proc(BIF_P, am_active);
+        }
 	BIF_ERROR(BIF_P, BADARG);
     }
     
@@ -201,6 +207,9 @@ do_port_command(Process *BIF_P, Eterm arg1, Eterm arg2, Eterm arg3,
     }
     if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
     	profile_runnable_proc(BIF_P, am_active);
+    }
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_profile_runnable_proc(BIF_P, am_active);
     }
     
     if (ERTS_PROC_IS_EXITING(BIF_P)) {
@@ -281,6 +290,9 @@ port_call(Process* c_p, Eterm arg1, Eterm arg2, Eterm arg3)
     if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
 	profile_runnable_proc(c_p, am_inactive);
     }
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_profile_runnable_proc(c_p, am_inactive);
+    }
 
     p = id_or_name2port(c_p, arg1);
     if (!p) {
@@ -301,6 +313,9 @@ port_call(Process* c_p, Eterm arg1, Eterm arg2, Eterm arg3)
 	if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
 	    profile_runnable_proc(c_p, am_active);
     	}
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_profile_runnable_proc(c_p, am_active);
+    }
 
 	if (p)
 	    erts_port_release(p);
@@ -427,7 +442,10 @@ port_call(Process* c_p, Eterm arg1, Eterm arg2, Eterm arg3)
     if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
 	profile_runnable_proc(c_p, am_active);
     }
-  
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_profile_runnable_proc(c_p, am_active);
+    }
+ 
     return res;
 }
     
@@ -445,6 +463,9 @@ BIF_RETTYPE port_control_3(BIF_ALIST_3)
     if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
     	profile_runnable_proc(BIF_P, am_inactive);
     }
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_profile_runnable_proc(BIF_P, am_inactive);
+    }
 
     p = id_or_name2port(BIF_P, BIF_ARG_1);
     if (!p) {
@@ -456,6 +477,9 @@ BIF_RETTYPE port_control_3(BIF_ALIST_3)
 	if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
     	    profile_runnable_proc(BIF_P, am_active);
 	}
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_profile_runnable_proc(BIF_P, am_active);
+    }
 	
 	BIF_ERROR(BIF_P, BADARG);
     }
@@ -494,6 +518,9 @@ BIF_RETTYPE port_control_3(BIF_ALIST_3)
     
     if (erts_system_profile_flags.runnable_procs && erts_system_profile_flags.exclusive) {
     	profile_runnable_proc(BIF_P, am_active);
+    }
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_profile_runnable_proc(BIF_P, am_active);
     }
     
     if (is_non_value(res)) {

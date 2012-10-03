@@ -2021,6 +2021,27 @@ trace_proc(Process *c_p, Process *t_p, Eterm what, Eterm data)
     }
 }
 
+void
+d_trace_proc(Process *c_p, Process *t_p, Eterm what, Eterm data)
+{
+    Eterm t;
+    Eterm* hp;
+    int need;
+
+#define LOCAL_HEAP_SIZE (5+5)
+    DeclareTmpHeapNoproc(local_heap,LOCAL_HEAP_SIZE);
+    UseTmpHeapNoproc(LOCAL_HEAP_SIZE);
+
+    hp = local_heap;
+    t = TUPLE4(hp, am_trace, t_p->id, what, data);
+    hp += 5;
+    hp = patch_ts(t, hp);
+
+    d_trace_save(t, t_p);
+
+    UnUseTmpHeapNoproc(LOCAL_HEAP_SIZE);
+#undef LOCAL_HEAP_SIZE
+}
 
 /* Sends trace message:
  *    {trace_ts, ParentPid, spawn, ChildPid, {Mod, Func, Args}, Timestamp}
@@ -2090,6 +2111,78 @@ trace_proc_spawn(Process *p, Eterm pid,
 	ERTS_ENQ_TRACE_MSG(p->id, tracer_ref, mess, bp);
 	erts_smp_mtx_unlock(&smq_mtx);
     }
+}
+
+void
+d_trace_proc_spawn(Process *p, Eterm pid,
+    Eterm mod, Eterm func, Eterm args)
+{
+
+    Eterm mfa, t;
+    Eterm *hp;
+
+#define LOCAL_HEAP_SIZE (4+6+5)
+    DeclareTmpHeapNoproc(local_heap,LOCAL_HEAP_SIZE);
+    UseTmpHeapNoproc(LOCAL_HEAP_SIZE);
+
+    hp = local_heap;
+
+    mfa = TUPLE3(hp, mod, func, NIL);
+    hp += 4;
+
+    t = TUPLE5(hp, am_trace, p->id, am_spawn, pid, mfa);
+    hp += 6;
+
+    hp = patch_ts(t, hp);
+
+    d_trace_save(t, p);
+
+    UnUseTmpHeapNoproc(LOCAL_HEAP_SIZE);
+#undef LOCAL_HEAP_SIZE
+}
+
+void d_trace_save(Eterm t, Process *p)
+{
+
+    Eterm bt;
+    Uint sz, szb;
+    byte *bby = NULL, *bbt = NULL;
+    int i, j, c;
+    char* obtbuf;
+
+    bt = erts_term_to_binary(p, t, 0, TERM_TO_BINARY_DFLAGS);
+    szb = binary_size(bt);
+    sz = 5 + 4 * szb;
+
+    bby = erts_get_aligned_binary_bytes(bt, &bbt);
+
+    DTRACE_CHARBUF(btbuf, sz);
+    obtbuf = btbuf;
+
+    c = 0;
+    erts_sprintf(btbuf, "<<");
+    btbuf = btbuf + 2;
+    c = c + 2;
+
+    for (i = 0; i < szb; ++i) {
+
+        j = erts_sprintf(btbuf, "%d", (unsigned) bby[i]);
+        btbuf = btbuf + j;
+        c = c + j;
+
+        if (i < (szb - 1)) {
+            erts_sprintf(btbuf, ",");
+            btbuf = btbuf + 1;
+            c = c + 1;
+        }
+    }
+    erts_sprintf(btbuf, ">>.\0");
+
+    c = c + 5;
+
+    erts_free_aligned_binary_bytes(bbt);
+
+    DTRACE1(percept_trace, obtbuf);
 }
 
 void save_calls(Process *p, Export *e)
@@ -3014,6 +3107,53 @@ profile_runnable_proc(Process *p, Eterm status){
 }
 /* End system_profile tracing */
 
+void
+d_profile_runnable_proc(Process *p, Eterm status){
+    Uint Ms, s, us;
+    Eterm *hp, t, timestamp;
+    Eterm where = am_undefined;
+
+#ifndef ERTS_SMP
+#define LOCAL_HEAP_SIZE (4 + 6 + 4)
+
+    DeclareTmpHeapNoproc(local_heap,LOCAL_HEAP_SIZE);
+    UseTmpHeapNoproc(LOCAL_HEAP_SIZE);
+
+    hp = local_heap;
+#else
+    ErlHeapFragment *bp;
+    Uint hsz = 4 + 6 + 4;
+#endif
+
+    if (!p->current) {
+        p->current = find_function_from_pc(p->i);
+    }
+
+#ifdef ERTS_SMP
+    if (!p->current) {
+        hsz = 4 + 6;
+    }
+
+    bp = new_message_buffer(hsz);
+    hp = bp->mem;
+#endif
+
+    if (p->current) {
+        where = TUPLE3(hp, p->current[0], p->current[1], make_small(p->current[2]));
+        hp += 4;
+    } else {
+        where = make_small(0);
+    }
+
+    GET_NOW(&Ms, &s, &us);
+    timestamp = TUPLE3(hp, make_small(Ms), make_small(s), make_small(us));
+    hp += 4;
+    t = TUPLE5(hp, am_profile, p->id, status, where, timestamp);
+    hp += 6;
+
+    d_trace_save(t, p);
+    UnUseTmpHeapNoproc(LOCAL_HEAP_SIZE);
+}
 
 
 #ifdef ERTS_SMP

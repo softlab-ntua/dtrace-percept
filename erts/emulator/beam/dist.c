@@ -327,6 +327,9 @@ static void doit_link_net_exits_sub(ErtsLink *sublnk, void *vlnecp)
 		/* We didn't exit the process and it is traced */
 		trace_proc(NULL, rp, am_getting_unlinked, sublnk->pid);
 	    }
+        if (xres >= 0 && DTRACE_ENABLED(percept_trace)) {
+            d_trace_proc(NULL, rp, am_getting_unlinked, sublnk->pid);
+        }
 	}
 	erts_smp_proc_unlock(rp, rp_locks);
     }
@@ -1155,6 +1158,9 @@ int erts_net_message(Port *prt,
 
 	if (IS_TRACED_FL(rp, F_TRACE_PROCS))
 	    trace_proc(NULL, rp, am_getting_linked, from);
+    if (DTRACE_ENABLED(percept_trace)) {
+        d_trace_proc(NULL, rp, am_getting_linked, from);
+    }
 
 	erts_smp_proc_unlock(rp, ERTS_PROC_LOCK_LINK);
 	break;
@@ -1181,6 +1187,9 @@ int erts_net_message(Port *prt,
 	if (IS_TRACED_FL(rp, F_TRACE_PROCS) && lnk != NULL) {
 	    trace_proc(NULL, rp, am_getting_unlinked, from);
 	}
+    if (DTRACE_ENABLED(percept_trace) && lnk != NULL) {
+        d_trace_proc(NULL, rp, am_getting_unlinked, from);
+    }
 
 	erts_smp_proc_unlock(rp, ERTS_PROC_LOCK_LINK);
 
@@ -1511,6 +1520,9 @@ int erts_net_message(Port *prt,
 		    /* We didn't exit the process and it is traced */
 		    trace_proc(NULL, rp, am_getting_unlinked, from);
 		}
+        if (xres >= 0 && DTRACE_ENABLED(percept_trace)) {
+            d_trace_proc(NULL, rp, am_getting_unlinked, from);
+        }
 	    }
 	    erts_smp_proc_unlock(rp, rp_locks);
 	}
