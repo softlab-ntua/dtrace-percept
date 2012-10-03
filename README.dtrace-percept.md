@@ -5,23 +5,23 @@ tracing machanisms of Erlang for the collection of trace information.
 
 # How can I use DTrace Percept?
 
-1. Run the DTrace/SystemTap script and redirect its output into a file.
+Run the DTrace/SystemTap script and redirect its output into a file.
 
     stap path/to/percept/lib/priv/dtrace/dtrace-percept.stap > trace.dat
 
     dtrace path/to/percept/lib/priv/dtrace/dtrace-percept.d > trace.dat
 
-2. Perform the action you want to trace.
+Perform the action you want to trace.
 
     erl -noshell - eval "bang:bang(2,30)." -s init stop
 
-3. Stop the execution of the DTrace/SystemTap script (by pressing Ctrl+C).
+Stop the execution of the DTrace/SystemTap script (by pressing Ctrl+C).
 
-4. Analyze the produced trace file.
+Analyze the produced trace file.
 
     1> percept:d_analyze("trace.dat").
 
-5. Start the web server (as usual) and inspect the collected information using 
+Start the web server (as usual) and inspect the collected information using 
 your favorite browser (as usual).
 
     1> percept:start_webserver().
